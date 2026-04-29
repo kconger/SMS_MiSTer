@@ -281,6 +281,7 @@ architecture Behavioral of system is
 	signal mapper_nemesis_auto  : std_logic;  -- '1' for Nemesis I (CRC 0xEE05) - needs last-page boot
 	signal mapper_zemina_crc    : std_logic;  -- '1' for other Zemina CRC matches - plain Zemina
 	signal mapper_castle        : std_logic := '0'; -- The Castle (Japan): 32KB RAM at 0x8000-0xFFFF
+	signal mapper_wonderkid     : std_logic;         -- Wonder Kid [Proto]: Codemasters-style 16KB, all banks init 0
 	signal reset_n_prev         : std_logic := '0';  -- for synchronous rising-edge detection of RESET_n
 	signal bootloader_n_prev    : std_logic := '1';  -- for rising-edge detection of bootloader_n (BIOS->cart handoff)
 
@@ -879,7 +880,7 @@ port map(
 			mapper_msx <= '0' ;
 		else
 			if rising_edge(clk_sys) then
-				if bootloader_n='1' and sc3000_en='0' and not mapper_msx_lock then
+				if bootloader_n='1' and sc3000_en='0' and mapper_wonderkid='0' and not mapper_msx_lock then
 					if MREQ_n='0' then 
 					-- in this state, A is stable but not D_out
 						if A=x"0000" then
@@ -933,6 +934,11 @@ port map(
 				if RESET_n = '1' and reset_n_prev = '0' then
 					if mapper_nemesis_auto = '1' then
 						nem_bank0 <= std_logic_vector(unsigned(rom_size_pages) - 1);
+					elsif mapper_wonderkid = '1' then
+						-- All slots start at page 0; pre-lock to prevent 4-PAK misdetection
+						bank1         <= "00000000";
+						bank2         <= "00000000";
+						lock_mapper_B <= '1';
 					end if;
 				end if;
 				reset_n_prev <= RESET_n;
@@ -1068,6 +1074,13 @@ port map(
 	-- The Castle (Japan) [SG-1000]: 32KB ROM, 32KB RAM at 0x8000-0xFFFF
 	-- CRC16-CCITT of last 8KB block: 0xEF38
 	mapper_castle <= '1' when rom_crc16_run = x"EF38" else '0';
+
+	-- Wonder Kid [Proto] [SMS-GG]: MAPPER_MSX_Generic16_8000
+	-- Codemasters-style 16KB banking, register at $8000, all slots init at page 0.
+	-- ROM starts with 0x41 0x42 which would normally trigger MSX/Zemina mapper;
+	-- suppressed here by CRC. Banks initialised to 0/0/0 at RESET_n rise.
+	-- CRC16-CCITT of last 8KB block: 0x8613
+	mapper_wonderkid <= '1' when rom_crc16_run = x"8613" else '0';
 
 	-- Nemesis I  (0xEE05): Zemina banking with $0000-$1FFF = last 8KB page at startup
 	mapper_nemesis_auto <= '1' when rom_crc16_run = x"EE05" else '0';
