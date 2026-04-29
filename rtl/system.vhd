@@ -280,6 +280,7 @@ architecture Behavioral of system is
 	-- Nemesis II+ (other CRCs): plain Zemina banking ($0000-$1FFF = page 0), no special startup page
 	signal mapper_nemesis_auto  : std_logic;  -- '1' for Nemesis I (CRC 0xEE05) - needs last-page boot
 	signal mapper_zemina_crc    : std_logic;  -- '1' for other Zemina CRC matches - plain Zemina
+	signal mapper_castle        : std_logic := '0'; -- The Castle (Japan): 32KB RAM at 0x8000-0xFFFF
 	signal reset_n_prev         : std_logic := '0';  -- for synchronous rising-edge detection of RESET_n
 	signal bootloader_n_prev    : std_logic := '1';  -- for rising-edge detection of bootloader_n (BIOS->cart handoff)
 
@@ -643,8 +644,8 @@ port map(
 	io_sc_legacy_port <= '1' when (A(7 downto 0)=x"DE" or A(7 downto 0)=x"DF") and palettemode='1' and gg='0' and systeme='0' else '0';
 	io_sc_mc_port <= '1' when A(7 downto 5)="111" and sc_multicart_en='1' and gg='0' and systeme='0' else '0';
 
-	sc_cart_ram_32k <= '1' when sc3000_en='1' and sc_cart_ram="11" else '0';
-	sc_cart_ram_low <= '1' when sc3000_en='1' and sc_cart_ram/="00" and A(15 downto 14)="10" else '0';
+	sc_cart_ram_32k <= '1' when (sc3000_en='1' and sc_cart_ram="11") or mapper_castle='1' else '0';
+	sc_cart_ram_low <= '1' when ((sc3000_en='1' and sc_cart_ram/="00") or mapper_castle='1') and A(15 downto 14)="10" else '0';
 	sc_cart_ram_high <= '1' when sc_cart_ram_32k='1' and A(15 downto 14)="11" else '0';
 	sc_cart_ram_rd <= sc_cart_ram_low or sc_cart_ram_high;
 	sc_multicart_upper <= '1' when sc_multicart_en='1' and A(15)='1' else '0';
@@ -662,7 +663,7 @@ port map(
 	-- 11=32KB total (32KB cart overlaying the internal 2KB window).
 	nvram_a <= "0000" & A(10 downto 0) when sc3000_en = '1' and sc_cart_ram = "01" else
 	           '0' & A(13 downto 0) when sc3000_en = '1' and sc_cart_ram = "10" else
-	           A(14 downto 0) when sc3000_en = '1' and sc_cart_ram = "11" else
+	           A(14 downto 0) when (sc3000_en = '1' and sc_cart_ram = "11") or mapper_castle = '1' else
 	           (nvram_p and not A(14)) & A(13 downto 0);
 	nvram_we <= nvram_WR;
 	nvram_d <= D_in;
@@ -768,7 +769,8 @@ port map(
 						or (A(15 downto 13)="101" and nvram_cme = '1'))
 						or sc_cart_ram_low='1'
 						or sc_cart_ram_high='1') else '0';
-	rom_RD   <= not RD_n when MREQ_n='0' and A(15 downto 14)/="11" and sc_multicart_upper='0' else '0';
+	rom_RD   <= not RD_n when MREQ_n='0' and A(15 downto 14)/="11" and sc_multicart_upper='0'
+	                     and not (mapper_castle='1' and A(15)='1') else '0';
 	color    <= vdp2_color when (vdp2_y1='1' and systeme='1' and vdp_enables(1)='0') else vdp_color when vdp_enables(0)='0' else x"000";
 
 	process (clk_sys)
@@ -939,8 +941,8 @@ port map(
 					last_read_addr <= A; -- gyurco anti-ldir patch
 				end if;
 
-				if systeme = '1' or sc3000_en = '1' then
-					-- no System E or SC-3000 mappers
+				if systeme = '1' or sc3000_en = '1' or mapper_castle = '1' then
+					-- no System E, SC-3000, or Castle (32KB RAM) mappers
 				elsif mapper_4pak = '1' then
 					-- 4-PAK All Action mapper (per MAME sega8_4pak_device):
 					-- $3FFE: reg0=D; bank0=D; bank2=(reg0[5:4]+reg2)
@@ -1062,6 +1064,10 @@ port map(
 			end if;
 		end if;
 	end process;
+
+	-- The Castle (Japan) [SG-1000]: 32KB ROM, 32KB RAM at 0x8000-0xFFFF
+	-- CRC16-CCITT of last 8KB block: 0xEF38
+	mapper_castle <= '1' when rom_crc16_run = x"EF38" else '0';
 
 	-- Nemesis I  (0xEE05): Zemina banking with $0000-$1FFF = last 8KB page at startup
 	mapper_nemesis_auto <= '1' when rom_crc16_run = x"EE05" else '0';
