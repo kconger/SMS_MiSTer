@@ -45,6 +45,11 @@ module sdram
 	output reg        rd_rdy = 0,
 	output      [7:0] dout,			// data output to chipset/cpu
 
+	input      [24:0] raddr2,     // second read-only port
+	input             rd2,
+	output reg        rd2_rdy = 0,
+	output      [7:0] dout2,
+
 	input      [24:0] waddr,      // 25 bit byte address
 	input       [7:0] din,			// data input from chipset/cpu
 	input             we,         // cpu/chipset requests write
@@ -72,46 +77,115 @@ localparam STATE_READY = STATE_CONT+CAS_LATENCY+1;
 
 
 reg  [3:0] q;
-reg [22:0] a;
-reg  [1:0] bank;
-reg  [7:0] data;
-reg [15:0] sd_dat;
-reg        wr;
-reg        ram_req=0;
+reg [22:0] a0, a1;
+reg  [1:0] bank0, bank1;
+reg  [7:0] data0;
+reg [15:0] sd_dat0, sd_dat1;
+reg        sd_sel0, sd_sel1;
+reg        wr0;
+reg        req0 = 0;
+reg        req1 = 0;
+reg        ch0 = 0;
+reg        ch1 = 0;
 
-assign dout = a[0] ? sd_dat[15:8] : sd_dat[7:0];
+assign dout  = sd_sel0 ? sd_dat0[15:8] : sd_dat0[7:0];
+assign dout2 = sd_sel1 ? sd_dat1[15:8] : sd_dat1[7:0];
 
 // access manager
 always @(posedge clk) begin
 	reg old_ref;
 	reg old_rd;
+	reg old_rd2;
+	reg rd_req;
+	reg rd2_req;
+	reg t_req0;
+	reg t_req1;
+	reg t_wr0;
+	reg t_ch0;
+	reg t_ch1;
+	reg [22:0] t_a0;
+	reg [22:0] t_a1;
+	reg [1:0]  t_bank0;
+	reg [1:0]  t_bank1;
+	reg [7:0]  t_data0;
 
 	old_ref<=clkref;
 
 	if(q==STATE_IDLE) begin
+		rd_req = ~old_rd & rd;
+		rd2_req = ~old_rd2 & rd2;
 		old_rd <= rd;
+		old_rd2 <= rd2;
 		rd_rdy <= 1;
-		ram_req <= 0;
-		wr <= 0;
+		rd2_rdy <= 1;
+
+		t_req0 = 0;
+		t_req1 = 0;
+		t_wr0 = 0;
+		t_ch0 = 0;
+		t_ch1 = 0;
+		t_a0 = 0;
+		t_a1 = 0;
+		t_bank0 = 0;
+		t_bank1 = 0;
+		t_data0 = 0;
 
 		if(we_ack != we) begin
-			ram_req <= 1;
-			wr <= 1;
-			{bank,a} <= waddr;
-			data <= din;
+			t_req0 = 1;
+			t_wr0 = 1;
+			{t_bank0,t_a0} = waddr;
+			t_data0 = din;
 		end
-		else
-		if(~old_rd & rd) begin
+
+		if(rd_req) begin
 			rd_rdy <= 0;
-			ram_req <= 1;
-			wr <= 0;
-			{bank,a} <= raddr;
+			if(t_req0) begin
+				t_req1 = 1;
+				t_ch1 = 0;
+				{t_bank1,t_a1} = raddr;
+			end else begin
+				t_req0 = 1;
+				t_wr0 = 0;
+				t_ch0 = 0;
+				{t_bank0,t_a0} = raddr;
+			end
 		end
+
+		if(rd2_req) begin
+			rd2_rdy <= 0;
+			if(t_req0) begin
+				t_req1 = 1;
+				t_ch1 = 1;
+				{t_bank1,t_a1} = raddr2;
+			end else begin
+				t_req0 = 1;
+				t_wr0 = 0;
+				t_ch0 = 1;
+				{t_bank0,t_a0} = raddr2;
+			end
+		end
+
+		req0 <= t_req0;
+		req1 <= t_req1;
+		wr0 <= t_wr0;
+		ch0 <= t_ch0;
+		ch1 <= t_ch1;
+		a0 <= t_a0;
+		a1 <= t_a1;
+		bank0 <= t_bank0;
+		bank1 <= t_bank1;
+		data0 <= t_data0;
 	end
 
-	if (q == STATE_READY && ram_req) begin
-		if(wr) we_ack <= we;
-		else   rd_rdy <= 1;
+	if (q == STATE_READY && req0) begin
+		if(wr0) we_ack <= we;
+		else if(ch0) rd2_rdy <= 1;
+		else rd_rdy <= 1;
+	end
+
+	if (q == 4'd12 && req1) begin
+		if(ch1) rd2_rdy <= 1;
+		else rd_rdy <= 1;
 	end
 
 	if(~&q) q <= q + 1'd1;
@@ -154,7 +228,7 @@ localparam CMD_LOAD_MODE       = 4'b0000;
 
 // SDRAM state machines
 always @(posedge clk) begin
-	casex({ram_req,wr,mode,q})
+	casex({req0,wr0,mode,q})
 		{2'b1X, MODE_NORMAL, STATE_START}: {SDRAM_nCS, SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE} <= CMD_ACTIVE;
 		{2'b11, MODE_NORMAL, STATE_CONT }: {SDRAM_nCS, SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE} <= CMD_WRITE;
 		{2'b10, MODE_NORMAL, STATE_CONT }: {SDRAM_nCS, SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE} <= CMD_READ;
@@ -166,10 +240,12 @@ always @(posedge clk) begin
 
 		                          default: {SDRAM_nCS, SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE} <= CMD_INHIBIT;
 	endcase
+	if(mode == MODE_NORMAL && req1 && q == 4'd7) {SDRAM_nCS, SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE} <= CMD_ACTIVE;
+	if(mode == MODE_NORMAL && req1 && q == 4'd9) {SDRAM_nCS, SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE} <= CMD_READ;
 
-	casex({ram_req,mode,q})
-		{1'b1,  MODE_NORMAL, STATE_START}: SDRAM_A <= a[21:9];
-		{1'b1,  MODE_NORMAL, STATE_CONT }: SDRAM_A <= {~a[0] & wr, a[0] & wr, 2'b10, a[22], a[8:1]};
+	casex({req0,mode,q})
+		{1'b1,  MODE_NORMAL, STATE_START}: SDRAM_A <= a0[21:9];
+		{1'b1,  MODE_NORMAL, STATE_CONT }: SDRAM_A <= {~a0[0] & wr0, a0[0] & wr0, 2'b10, a0[22], a0[8:1]};
 
 		// init
 		{1'bX,     MODE_LDM, STATE_START}: SDRAM_A <= MODE;
@@ -177,12 +253,32 @@ always @(posedge clk) begin
 
 		                          default: SDRAM_A <= 13'b0000000000000;
 	endcase
+	if(mode == MODE_NORMAL && req1 && q == 4'd7) SDRAM_A <= a1[21:9];
+	if(mode == MODE_NORMAL && req1 && q == 4'd9) SDRAM_A <= {2'b00, 2'b10, a1[22], a1[8:1]};
 
-	if(q == STATE_START) SDRAM_BA <= (mode == MODE_NORMAL) ? bank : 2'b00;
+	if(q == STATE_START) SDRAM_BA <= (mode == MODE_NORMAL) ? bank0 : 2'b00;
+	if(q == 4'd7) SDRAM_BA <= (mode == MODE_NORMAL) ? bank1 : 2'b00;
 
 	SDRAM_DQ <= 16'hZZZZ;
-	if(q == STATE_CONT) SDRAM_DQ <= {data,data};
-	if(q == STATE_READY && ~wr && ram_req) sd_dat <= SDRAM_DQ;
+	if(q == STATE_CONT) SDRAM_DQ <= {data0,data0};
+	if(q == STATE_READY && ~wr0 && req0) begin
+		if(ch0) begin
+			sd_dat1 <= SDRAM_DQ;
+			sd_sel1 <= a0[0];
+		end else begin
+			sd_dat0 <= SDRAM_DQ;
+			sd_sel0 <= a0[0];
+		end
+	end
+	if(q == 4'd12 && req1) begin
+		if(ch1) begin
+			sd_dat1 <= SDRAM_DQ;
+			sd_sel1 <= a1[0];
+		end else begin
+			sd_dat0 <= SDRAM_DQ;
+			sd_sel0 <= a1[0];
+		end
+	end
 end
 
 endmodule

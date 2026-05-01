@@ -8,7 +8,9 @@ use work.jt89.all;
 entity system is
 	generic (
 		MAX_SPPL : integer := 7;
-		BASE_DIR : string := ""
+		BASE_DIR : string := "";
+		GAMEGEAR_ONLY : integer := 0;
+		CHEATS_ENABLE : integer := 1
 	);
 	port (
 		clk_sys:		in	 STD_LOGIC;
@@ -363,22 +365,30 @@ architecture Behavioral of system is
 begin
 
 	-- Game Genie
-	GAMEGENIE : component CODES
-	generic map(
-		ADDR_WIDTH => 16,
-		DATA_WIDTH => 8
-	)
-	port map(
-		clk => clk_sys,
-		reset => GG_RESET,
-		enable => not GG_EN,
-		addr_in => A,
-		data_in => D_out,
-		code => GG_CODE,
-		available => GG_AVAIL,
-		genie_ovr => GENIE,
-		genie_data => GENIE_DO
-	);
+	gen_cheats: if CHEATS_ENABLE /= 0 generate
+		GAMEGENIE : component CODES
+		generic map(
+			ADDR_WIDTH => 16,
+			DATA_WIDTH => 8
+		)
+		port map(
+			clk => clk_sys,
+			reset => GG_RESET,
+			enable => not GG_EN,
+			addr_in => A,
+			data_in => D_out,
+			code => GG_CODE,
+			available => GG_AVAIL,
+			genie_ovr => GENIE,
+			genie_data => GENIE_DO
+		);
+	end generate;
+
+	gen_no_cheats: if CHEATS_ENABLE = 0 generate
+		GG_AVAIL <= '0';
+		GENIE <= false;
+		GENIE_DO <= (others => '0');
+	end generate;
 	
 	GENIE_DI <= GENIE_DO when GENIE else D_out;
 
@@ -441,43 +451,52 @@ begin
 		reset_n  => RESET_n
 	);
 
-	vdp2_inst: entity work.vdp
-	generic map(
-		MAX_SPPL => MAX_SPPL
-	)
-	port map
-	(
-		clk_sys	=> clk_sys,
-		ce_vdp	=> ce_vdp,
-		ce_pix	=> ce_pix,
-		ce_sp		=> ce_sp,
-		sp64		=> sp64,
-		HL			=> HL,
-		gg			=> gg,
-		ggres			=> ggres,
-		-- Bsg			=> sg,		-- sg1000
-		se_bank	=> vdp2_se_bank,
-		RD_n		=> vdp2_RD_n,
-		WR_n		=> vdp2_WR_n,
-		IRQ_n		=> vdp2_IRQ_n,
-		WR_direct => vram2_WR,
-		A_direct	=> A(13 downto 8),
-		A			=> A(7 downto 0),
-		D_in		=> D_in,
-		D_out		=> vdp2_D_out,
-		x			=> x,
-		y			=> y,
-		color		=> vdp2_color,
-		palettemode	=> palettemode,
-		y1       => vdp2_y1,
---		smode_M1  => smode2_M1,
---		smode_M2  => smode2_M2,
---		smode_M3  => smode2_M3,
-		ysj_quirk	=> ysj_quirk,
---		mask_column => mask2_column,
-		black_column => black_column,
-		reset_n  => RESET_n
-	);
+	gen_vdp2: if GAMEGEAR_ONLY = 0 generate
+		vdp2_inst: entity work.vdp
+		generic map(
+			MAX_SPPL => MAX_SPPL
+		)
+		port map
+		(
+			clk_sys	=> clk_sys,
+			ce_vdp	=> ce_vdp,
+			ce_pix	=> ce_pix,
+			ce_sp		=> ce_sp,
+			sp64		=> sp64,
+			HL			=> HL,
+			gg			=> gg,
+			ggres			=> ggres,
+			-- Bsg			=> sg,		-- sg1000
+			se_bank	=> vdp2_se_bank,
+			RD_n		=> vdp2_RD_n,
+			WR_n		=> vdp2_WR_n,
+			IRQ_n		=> vdp2_IRQ_n,
+			WR_direct => vram2_WR,
+			A_direct	=> A(13 downto 8),
+			A			=> A(7 downto 0),
+			D_in		=> D_in,
+			D_out		=> vdp2_D_out,
+			x			=> x,
+			y			=> y,
+			color		=> vdp2_color,
+			palettemode	=> palettemode,
+			y1       => vdp2_y1,
+	--		smode_M1  => smode2_M1,
+	--		smode_M2  => smode2_M2,
+	--		smode_M3  => smode2_M3,
+			ysj_quirk	=> ysj_quirk,
+	--		mask_column => mask2_column,
+			black_column => black_column,
+			reset_n  => RESET_n
+		);
+	end generate;
+
+	gen_no_vdp2: if GAMEGEAR_ONLY /= 0 generate
+		vdp2_D_out <= (others => '0');
+		vdp2_IRQ_n <= '1';
+		vdp2_color <= (others => '0');
+		vdp2_y1 <= '0';
+	end generate;
 
 	psg_inst: jt89
 	port map
@@ -494,46 +513,59 @@ begin
 		rst		=> not RESET_n
 	);
 	
-	psg2_inst: jt89
-	port map
-	(
-		clk		=> clk_sys,
-		clk_en   => ce_cpu,
-		wr_n		=> psg2_WR_n,
-		din		=> D_in,
-		
-		mux		=> PSG_mux,
-		soundL	=> PSG2_outL,
-		soundR	=> PSG2_outR,
+	gen_psg2: if GAMEGEAR_ONLY = 0 generate
+		psg2_inst: jt89
+		port map
+		(
+			clk		=> clk_sys,
+			clk_en   => ce_cpu,
+			wr_n		=> psg2_WR_n,
+			din		=> D_in,
 
-		rst		=> not RESET_n
-	);
+			mux		=> PSG_mux,
+			soundL	=> PSG2_outL,
+			soundR	=> PSG2_outR,
+
+			rst		=> not RESET_n
+		);
+	end generate;
+
+	gen_no_psg2: if GAMEGEAR_ONLY /= 0 generate
+		PSG2_outL <= (others => '0');
+		PSG2_outR <= (others => '0');
+	end generate;
 	
-	fm: work.opll
-	port map
-	(
-		xin		=> clk_sys,
-		xena		=> ce_cpu,
-		d        => fm_d,
-		a        => fm_a,
-		cs_n     => '0',
-		we_n		=> '0',
-		ic_n		=> RESET_n,
-		mixout   => FM_out
-	);
-	
-	process (clk_sys)
-	begin
-		if rising_edge(clk_sys) then
-			if RESET_n='0' then
-				fm_d <= (others => '0');
-				fm_a <= '0';
-			elsif fm_WR_n='0' then
-				fm_d <= D_in;
-				fm_a <= A(0);
+	gen_fm: if GAMEGEAR_ONLY = 0 generate
+		fm: work.opll
+		port map
+		(
+			xin		=> clk_sys,
+			xena		=> ce_cpu,
+			d        => fm_d,
+			a        => fm_a,
+			cs_n     => '0',
+			we_n		=> '0',
+			ic_n		=> RESET_n,
+			mixout   => FM_out
+		);
+
+		process (clk_sys)
+		begin
+			if rising_edge(clk_sys) then
+				if RESET_n='0' then
+					fm_d <= (others => '0');
+					fm_a <= '0';
+				elsif fm_WR_n='0' then
+					fm_d <= D_in;
+					fm_a <= A(0);
+				end if;
 			end if;
-		end if;
-	end process;
+		end process;
+	end generate;
+
+	gen_no_fm: if GAMEGEAR_ONLY /= 0 generate
+		FM_out <= (others => '0');
+	end generate;
 	
 	
 -- AMR - Clamped volume boosting - if the top two bits match, truncate the topmost bit.
@@ -679,68 +711,86 @@ port map(
 	nvram_d <= D_in;
 	nvram_D_out <= nvram_q;
 
-	boot_rom_inst : entity work.sprom
-	generic map
-	(
-		init_file=> BASE_DIR & "rtl/mboot.mif",
-		widthad_a=> 14
-	)
-	port map
-	(
-		clock		=> clk_sys,
-		address	=> A(13 downto 0),
-		q			=> boot_rom_D_out
-	);
+	gen_bios: if GAMEGEAR_ONLY = 0 generate
+		boot_rom_inst : entity work.sprom
+		generic map
+		(
+			init_file=> BASE_DIR & "rtl/mboot.mif",
+			widthad_a=> 14
+		)
+		port map
+		(
+			clock		=> clk_sys,
+			address	=> A(13 downto 0),
+			q			=> boot_rom_D_out
+		);
+
+		-- External BIOS RAM: up to 256KB, written only during BIOS file download (BIOSWEN)
+		-- Read address uses rom_a_i (mapper-translated) so banking works correctly.
+		-- The Zemina mapper is gated off during BIOS execution (see rom_a_i process),
+		-- so large banked BIOSes (e.g. Korean) use the standard Sega mapper here.
+		ext_bios_wren <= BIOSWEN;
+		ext_bios_addr <= ROMAD(17 downto 0) when BIOSWEN='1' else rom_a_i(17 downto 0);
+
+		ext_bios_inst : entity work.spram
+		generic map
+		(
+			widthad_a=> 18
+		)
+		port map
+		(
+			clock		=> clk_sys,
+			address	=> ext_bios_addr,
+			wren		=> ext_bios_wren,
+			data		=> ROMDT,
+			q			=> ext_bios_D_out
+		);
+	end generate;
+
+	gen_no_bios: if GAMEGEAR_ONLY /= 0 generate
+		boot_rom_D_out <= (others => '0');
+		ext_bios_D_out <= (others => '0');
+		ext_bios_wren <= '0';
+		ext_bios_addr <= (others => '0');
+	end generate;
 
 	-- Drive the output port from the internal signal
 	rom_a <= rom_a_i;
 
-	-- External BIOS RAM: up to 256KB, written only during BIOS file download (BIOSWEN)
-	-- Read address uses rom_a_i (mapper-translated) so banking works correctly.
-	-- The Zemina mapper is gated off during BIOS execution (see rom_a_i process),
-	-- so large banked BIOSes (e.g. Korean) use the standard Sega mapper here.
-	ext_bios_wren <= BIOSWEN;
-	ext_bios_addr <= ROMAD(17 downto 0) when BIOSWEN='1' else rom_a_i(17 downto 0);
+	gen_decrypt: if GAMEGEAR_ONLY = 0 generate
+		mc8123_inst : component MC8123_rom_decrypt
+		port map
+		(
+			clk		=> clk_sys,
+			m1			=> not M1_n,
+			a			=> A,
+			d			=> mc8123_D_out,
+			prog_d	=> rom_do,
+			key_a		=> key_a,
+			key_d		=> key_d
+		);
 
-	ext_bios_inst : entity work.spram
-	generic map
-	(
-		widthad_a=> 18
-	)
-	port map
-	(
-		clock		=> clk_sys,
-		address	=> ext_bios_addr,
-		wren		=> ext_bios_wren,
-		data		=> ROMDT,
-		q			=> ext_bios_D_out
-	);	
-	mc8123_inst : component MC8123_rom_decrypt
-	port map
-	(
-		clk		=> clk_sys,
-		m1			=> not M1_n,
-		a			=> A,
-		d			=> mc8123_D_out,
-		prog_d	=> rom_do,
-		key_a		=> key_a,
-		key_d		=> key_d
-	);
-	
-	segadect2_inst : component SEGASYS1_DECT2
-	port map
-	(
-		clk		=> clk_sys,
-		mrom_m1	=> not M1_n,
-		mrom_ad	=> A(14 downto 0),
-		mrom_dt	=> segadect2_D_out,
---		rad      =>,
-		rdt		=> rom_do,
-		ROMCL		=> ROMCL,
-		ROMAD		=> ROMAD,
-		ROMDT		=> ROMDT,
-		ROMEN		=> ROMEN
-	);
+		segadect2_inst : component SEGASYS1_DECT2
+		port map
+		(
+			clk		=> clk_sys,
+			mrom_m1	=> not M1_n,
+			mrom_ad	=> A(14 downto 0),
+			mrom_dt	=> segadect2_D_out,
+	--		rad      =>,
+			rdt		=> rom_do,
+			ROMCL		=> ROMCL,
+			ROMAD		=> ROMAD,
+			ROMDT		=> ROMDT,
+			ROMEN		=> ROMEN
+		);
+	end generate;
+
+	gen_no_decrypt: if GAMEGEAR_ONLY /= 0 generate
+		mc8123_D_out <= rom_do;
+		segadect2_D_out <= rom_do;
+		key_a <= (others => '0');
+	end generate;
 	
 	-- glue logic
 	bal_WR_n <= WR_n when IORQ_n='0' and M1_n='1' and A(7 downto 0)="00000110" and gg='1' else '1';

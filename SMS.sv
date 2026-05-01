@@ -184,7 +184,7 @@ assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 
 assign {SD_SCK, SD_MOSI, SD_CS} = '1;
 
-assign LED_USER  = cart_download | bios_download | bk_state | (status[25] & bk_pending);
+assign LED_USER  = cart_download | bk_state | (status[25] & bk_pending);
 assign LED_DISK  = 0;
 assign LED_POWER = 0;
 assign BUTTONS   = osd_btn;
@@ -195,46 +195,12 @@ assign HDMI_BLACKOUT = 0;
 assign HDMI_BOB_DEINT = 0;
 assign FB_FORCE_BLANK = 0;
 
-wire       vcrop_en = status[50];
-wire [3:0] vcopt    = status[54:51];
-reg        en216p;
-reg  [4:0] voff;
-
-always @(posedge CLK_VIDEO) begin
-	en216p <= ((HDMI_WIDTH == 1920) && (HDMI_HEIGHT == 1080) && !forced_scandoubler && !scale);
-	voff <= (vcopt < 6) ? {vcopt,1'b0} : ({vcopt,1'b0} - 5'd24);
-end
-
 wire video_rotated;
-wire no_rotate = ~status[41];
-wire flip = status[42];
-wire rotate_ccw = 0;
-wire [5:0] arx, ary;
-
-always_comb begin
-	if (no_rotate) begin
-		if (gg) begin
-			arx = 6'd4;
-			ary = 6'd3;
-		end else begin
-			if (border) begin
-				arx = 6'd47;
-				ary = 6'd35;
-			end else begin
-				arx = 6'd32;
-				ary = 6'd21;
-			end
-		end
-	end else begin
-		if (border) begin
-			arx = 6'd35;
-			ary = 6'd47;
-		end else begin
-			arx = 6'd21;
-			ary = 6'd32;
-		end
-	end
-end
+wire no_rotate = 1'b1;
+wire flip = 1'b0;
+wire rotate_ccw = 1'b0;
+wire [5:0] arx = 6'd8;
+wire [5:0] ary = 6'd3;
 
 wire [1:0] ar = status[27:26];
 wire vga_de;
@@ -245,8 +211,8 @@ video_freak video_freak
 	.VGA_DE_IN(vga_de),
 	.ARX((!ar) ? arx : (ar - 1'd1)),
 	.ARY((!ar) ? ary : 12'd0),
-	.CROP_SIZE(en216p && vcrop_en ? 10'd216 : 10'd0),
-	.CROP_OFF(voff),
+	.CROP_SIZE(12'd0),
+	.CROP_OFF(5'd0),
 	.SCALE(status[31:30])
 );
 
@@ -256,18 +222,14 @@ video_freak video_freak
 // 0         1         2         3          4         5         6
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXX XXXXXXXXXXX       XXXXXXX XXXX
+// XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXX XXXXXXXXXXX       XXXXXXX XXXXXX
 
 `include "build_id.v"
 parameter CONF_STR = {
-	"SMS;;",
+	"GAMEGEAR2P;;",
 	"-;",
-	"H8FS1,SMSSG SC ;",
 	"H8FS2,GG;",
 	"DIP;",
-	"-;",
-	"C,Cheats;",
-	"H1OO,Cheats Enabled,ON,OFF;",
 	"-;",
 	"H8OP,Autosave,OFF,ON;",
 	"H8H9D0R6,Load Backup RAM;",
@@ -275,60 +237,24 @@ parameter CONF_STR = {
 	"H8-;",
 
 	"H8OA,Region,US/EU,Japan;",
-	"H8oBC,BIOS,Disable,Internal,Ext. File;",
-	"H8FS3,BINSMS,Load Ext. BIOS;",
-	"H8oDE,Mapper,Auto,Sega,Zemina;",
 	"H8o8,Z80 Speed,Normal,Turbo;",
-	"H8-;",
-	"H7o12,VDPs,Both,2,1,None;",
-	"H7o34,PSGs,Both,2,1,None;",
-	"H7-;",
 
 	"P1,Audio & Video;",
 	"P1-;",
-	"P1O2,TV System,NTSC,PAL;",
-	"h8P1o9,Orientation,Horz,Vert;",
-	"h8P1oA,Flip Screen,Off,On;",
-	"P1-;",
 	"P1OQR,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
 	"P1O35,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
-	"d6P1oI,Vertical Crop,Disabled,216p(5x);",
-	"d6P1oJM,Crop Offset,0,2,4,8,10,12,-12,-10,-8,-6,-4,-2;",
 	"P1OUV,Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer;",
 	"P1-;",
-	"D2P1OD,Border,No,Yes;",
-	"P1OST,Masked Left Column,BG,Black,Cut;",
 	"P1O8,Sprites Per Line,Standard,All;",
-	"d2P1o7,Game Gear Res.,Standard,Extended;",
 	"P1-;",
-	"P1OC,SMS FM Sound,Enable,Disable;",
-
-	"P2,Input;",
-	"P2-;",
-	"P2O1,Swap Joysticks,No,Yes;",
-	"P2OE,Multitap,Disabled,Port1;",
-	"P2oNO,USERIO,Off,SNAC,Gear2Gear;",
-	"D3P2OH,Pause Btn Combo,No,Yes;",
-	"P2-;",
-	"D2P2OIJ,Gun Control,Disabled,Joy1,Joy2,Mouse;",
-	"D4P2OK,Gun Fire,Joy,Mouse;",
-	"D4P2OL,Gun Port,Port1,Port2;",
-	"D4P2OMN,Cross,Small,Medium,Big,None;",
-	"P2-;",
-	"P2o56,Paddle Control,Disabled,Paddle,Joy;",
-	"P2-;",
-	"P2oP,SK-1100,Off,On;",
-	"P2-;",
-	"P2oQ,SC-3000,Off,On;",
-	"P2oRS,SG/SC Cart RAM,Off,2KB,16KB,32KB;",
+	"P1oT,Separator Line,Off,On;",
+	"P1oUV,Audioselect,GG 1,GG 2,Mixed,Split 1=L 2=R;",
 
 	"-;",
-	"H8RB,Soft Reset;",
-	"H8R9,Eject ROM;",
 	"R0,Reset;",
-	"J1,Fire 1,Fire 2,Pause,Coin,Arcade 3,Soft Reset;",
-	"jn,A|P,B,Start,Coin,X,Select;",
-	"jp,Y|P,A,Start,Coin,X,Select;",
+	"J1,Fire 1,Fire 2,Pause;",
+	"jn,A|P,B,Start;",
+	"jp,Y|P,A,Start;",
 	"V,v",`BUILD_DATE
 };
 
@@ -405,38 +331,9 @@ always @(posedge CLK_50M) begin
 	end
 end
 
-// BIOS and System Reset Control
-reg        ext_bios_loaded = 0;
-reg        old_bios_download;
-reg  [1:0] old_bios_mode;
-reg        old_sc3000_mode;
-reg  [1:0] old_sc_cart_ram;
-reg [21:0] reset_timer;
-reg        bios_config_reset;
-
-always_ff @(posedge clk_sys) begin
-	old_bios_download <= bios_download;
-	old_bios_mode     <= status[44:43];
-	old_sc3000_mode   <= status[58];
-	old_sc_cart_ram   <= status[60:59];
-
-	// Set ext_bios_loaded ONLY after download completes
-	if (old_bios_download && !bios_download) begin
-		ext_bios_loaded <= 1;
-	end
-
-	// Generate a 40ms pulse (at 50MHz) on BIOS or SC config changes.
-	if ((old_bios_mode != status[44:43]) || (old_bios_download ^ bios_download) ||
-	    (old_sc3000_mode != status[58]) || (old_sc_cart_ram != status[60:59])) begin
-		reset_timer <= 22'd2000000;
-	end else if (reset_timer > 0) begin
-		reset_timer <= reset_timer - 1'd1;
-	end
-
-	bios_config_reset <= (reset_timer > 0);
-end
-
-wire raw_reset = RESET | status[0] | buttons[1] | cart_download | bios_download | bios_config_reset | bk_loading | eject_rom;
+// Game Gear-only build: no BIOS file, System E, SG/SC, or SK-1100 config reset paths.
+wire ext_bios_loaded = 1'b0;
+wire raw_reset = RESET | status[0] | buttons[1] | cart_download | bk_loading;
 
 reg [13:0] ram_clr_addr;
 reg        ram_clr_run = 0;
@@ -452,6 +349,19 @@ always_ff @(posedge clk_sys) begin
 end
 
 wire reset_active = raw_reset | ram_clr_run;
+localparam [21:0] SYSTEM2_RESET_DELAY_CYCLES = 22'd3_000_000;
+reg [21:0] system2_reset_delay = SYSTEM2_RESET_DELAY_CYCLES;
+
+always_ff @(posedge clk_sys) begin
+	if (reset_active)
+		system2_reset_delay <= SYSTEM2_RESET_DELAY_CYCLES;
+	else if (system2_reset_delay != 0)
+		system2_reset_delay <= system2_reset_delay - 1'd1;
+end
+
+// Keep the second handheld in reset a little longer so link startup is not
+// perfectly cycle-synchronized between the two emulated systems.
+wire reset2_active = reset_active | (system2_reset_delay != 0);
 
 //////////////////   HPS I/O   ///////////////////
 wire [15:0] joy_0, joy_1, joy_2, joy_3;
@@ -463,10 +373,6 @@ wire [10:0] ps2_key;
 wire [63:0] status;
 reg  [127:0] status_in = 0;
 reg          status_set = 0;
-reg         sc3000_auto = 0;
-reg         sc_multicart_auto = 0;
-reg         sc_megacart_auto = 0;
-reg         sc3000_menu_auto = 0;
 
 wire        ioctl_wr;
 wire [24:0] ioctl_addr;
@@ -512,7 +418,7 @@ hps_io #(.CONF_STR(CONF_STR), .WIDE(0)) hps_io
 	.status(status),
 	.status_in(status_in),
 	.status_set(status_set),
-	.status_menumask({status[25],systeme,~dbg_menu,en216p,status[13],~gun_en,~raw_serial,gg,~gg_avail,~bk_ena}),
+	.status_menumask(10'd0),
 	.forced_scandoubler(forced_scandoubler),
 	.new_vmode(pal),
 	.gamma_bus(gamma_bus),
@@ -544,40 +450,19 @@ hps_io #(.CONF_STR(CONF_STR), .WIDE(0)) hps_io
 	.ps2_mouse(ps2_mouse)
 );
 
-wire [21:0] ram_addr;
-wire  [7:0] ram_dout;
-wire        ram_rd;
+wire [21:0] ram_addr1;
+wire  [7:0] ram_dout1;
+wire        ram_rd1;
+wire [21:0] ram_addr2;
+wire  [7:0] ram_dout2;
+wire        ram_rd2;
 
-wire code_index = &ioctl_index;
-wire code_download = ioctl_download & code_index;
-wire bios_download = ioctl_download & (ioctl_index[4:0] == 3);
-wire cart_download = ioctl_download & ~code_index & (ioctl_index[4:0]!=3) & (ioctl_index!=4) & (ioctl_index!=254);
+wire bios_download = 1'b0;
+wire cart_download = ioctl_download & (ioctl_index[4:0] == 2);
 
-// BIOS mode: status[44:43] == 2'b00->Disable, 01->Internal, 10->Ext. File
-wire bios_en      = (status[44:43] != 2'b00) & ~systeme;
-wire ext_bios_sel = (status[44:43] == 2'b10);
-wire eject_rom    = status[9];
-
-// Soft Reset: maps to port $DD bit 4 (active-low) on SMS hardware.
-// The OSD 'R' item sets status[11]=1 as soon as the cursor lands on it and
-// clears it when the OSD closes. We trigger on the FALLING edge (1→0) so the
-// pulse fires after the OSD closes and the game is running again — not while
-// the menu is still open. The pulse is held for ~37ms so the game's polling
-// loop (running at 60fps) is guaranteed to see the button pressed.
-// Joy buttons are used at level (active while held).
-reg [20:0] soft_reset_cnt  = 0;
-reg        soft_reset_prev = 0;
-reg        soft_reset_btn;
-
-always @(posedge clk_sys) begin
-	soft_reset_prev <= status[11];
-	if (soft_reset_prev & ~status[11])      // falling edge: OSD item deselected
-		soft_reset_cnt <= 21'd2_000_000;    // ~37ms at 53MHz
-	else if (soft_reset_cnt != 0)
-		soft_reset_cnt <= soft_reset_cnt - 1'd1;
-	// Active while joystick button held OR during the OSD-triggered pulse
-	soft_reset_btn <= (soft_reset_cnt != 0) | joy_0[9] | joy_1[9];
-end
+wire bios_en      = 1'b0;
+wire ext_bios_sel = 1'b0;
+wire soft_reset_btn = 1'b0;
 
 // SYSMODE[0]: [0]=EncryptBase,[1]=EncryptBank,[2]=Paddle,[3]=Pedal,[4,5]=E0Type,[6]=E1,[7]=E2
 // SYSMODE[1]: [0]=
@@ -596,17 +481,22 @@ sdram ram
 
 	.init(~locked),
 	.clk(clk_sys),
-	.clkref(systeme ? ce_pix : turbo ? ce_pix : ce_cpu),
+	.clkref(turbo ? ce_pix : ce_cpu),
 
 	.waddr(romwr_a),
 	.din(ioctl_dout),
 	.we(rom_wr),
 	.we_ack(sd_wrack),
 
-	.raddr(cart_sz512 ? (ram_addr + 10'd512) & cart_mask512 : ram_addr & cart_mask),
-	.dout(ram_dout),
-	.rd(ram_rd),
-	.rd_rdy()
+	.raddr(cart_sz512 ? (ram_addr1 + 10'd512) & cart_mask512 : ram_addr1 & cart_mask),
+	.dout(ram_dout1),
+	.rd(ram_rd1),
+	.rd_rdy(),
+
+	.raddr2(cart_sz512 ? (ram_addr2 + 10'd512) & cart_mask512 : ram_addr2 & cart_mask),
+	.dout2(ram_dout2),
+	.rd2(ram_rd2),
+	.rd2_rdy()
 );
 
 altddio_out
@@ -679,119 +569,28 @@ end
 assign AUDIO_S = 1;
 assign AUDIO_MIX = 1;
 
-reg [128:0] gg_code;
-wire gg_avail;
-
-// Code layout:
-// {clock bit, code flags,     32'b address, 32'b compare, 32'b replace}
-//  128        127:96          95:64         63:32         31:0
-// Integer values are in BIG endian byte order, so it up to the loader
-// or generator of the code to re-arrange them correctly.
-
-always_ff @(posedge clk_sys) begin
-	gg_code[128] <= 1'b0;
-
-	if (code_download & ioctl_wr) begin
-		case (ioctl_addr[3:0])
-			0:  gg_code[111:96]  <= ioctl_dout; // Flags Bottom Word
-			1:  gg_code[119:112] <= ioctl_dout; // Flags Bottom Word
-			2:  gg_code[127:120] <= ioctl_dout; // Flags Top Word
-			3:  gg_code[127:112] <= ioctl_dout; // Flags Top Word
-			4:  gg_code[71:64]   <= ioctl_dout; // Address Bottom Word
-			5:  gg_code[79:72]   <= ioctl_dout; // Address Bottom Word
-			6:  gg_code[87:80]   <= ioctl_dout; // Address Top Word
-			7:  gg_code[95:88]   <= ioctl_dout; // Address Top Word
-			8:  gg_code[39:32]   <= ioctl_dout; // Compare Bottom Word
-			9:  gg_code[47:40]   <= ioctl_dout; // Compare Bottom Word
-			10: gg_code[55:48]   <= ioctl_dout; // Compare top Word
-			11: gg_code[63:56]   <= ioctl_dout; // Compare top Word
-			12: gg_code[7:0]     <= ioctl_dout; // Replace Bottom Word
-			13: gg_code[15:8]    <= ioctl_dout; // Replace Bottom Word
-			14: gg_code[23:16]   <= ioctl_dout; // Replace Top Word
-			15: begin
-				gg_code[31:24]   <= ioctl_dout; // Replace Top Word
-				gg_code[128]     <= 1'b1;       // Clock it in
-			end
-		endcase
-	end
-end
-
-
 reg dbr = 0;
 always @(posedge clk_sys) begin
-	if(eject_rom) dbr <= 0;
-	else if(cart_download) dbr <= 1;
+	if(cart_download) dbr <= 1;
 end
 // [Handled in unified control block above]
 
-reg        gg          = 0;
-reg        systeme     = 0;
-reg        palettemode = 0;
-reg        load_sc     = 0;
-reg        load_sg     = 0;
-reg        load_sc_multicart = 0;
-reg        load_sc_megacart = 0;
-reg [21:0] cart_mask, cart_mask512;
-reg        cart_sz512;
-wire [7:0] ioctl_ext_b0 = ioctl_file_ext[7:0];
-wire [7:0] ioctl_ext_b1 = ioctl_file_ext[15:8];
-wire [7:0] ioctl_ext_b2 = ioctl_file_ext[23:16];
-wire [7:0] ioctl_ext_b3 = ioctl_file_ext[31:24];
-wire       ioctl_ext_has_s = (ioctl_ext_b0 == "S") || (ioctl_ext_b0 == "s") ||
-                             (ioctl_ext_b1 == "S") || (ioctl_ext_b1 == "s") ||
-                             (ioctl_ext_b2 == "S") || (ioctl_ext_b2 == "s") ||
-                             (ioctl_ext_b3 == "S") || (ioctl_ext_b3 == "s");
-wire       ioctl_ext_has_c = (ioctl_ext_b0 == "C") || (ioctl_ext_b0 == "c") ||
-                             (ioctl_ext_b1 == "C") || (ioctl_ext_b1 == "c") ||
-                             (ioctl_ext_b2 == "C") || (ioctl_ext_b2 == "c") ||
-                             (ioctl_ext_b3 == "C") || (ioctl_ext_b3 == "c");
-wire       ioctl_ext_has_g = (ioctl_ext_b0 == "G") || (ioctl_ext_b0 == "g") ||
-                             (ioctl_ext_b1 == "G") || (ioctl_ext_b1 == "g") ||
-                             (ioctl_ext_b2 == "G") || (ioctl_ext_b2 == "g") ||
-                             (ioctl_ext_b3 == "G") || (ioctl_ext_b3 == "g");
-wire       ioctl_ext_has_m = (ioctl_ext_b0 == "M") || (ioctl_ext_b0 == "m") ||
-                             (ioctl_ext_b1 == "M") || (ioctl_ext_b1 == "m") ||
-                             (ioctl_ext_b2 == "M") || (ioctl_ext_b2 == "m") ||
-                             (ioctl_ext_b3 == "M") || (ioctl_ext_b3 == "m");
-wire       ioctl_ext_is_sc = ioctl_ext_has_s && ioctl_ext_has_c && !ioctl_ext_has_g && !ioctl_ext_has_m;
-wire       ioctl_ext_is_sg = ioctl_ext_has_s && ioctl_ext_has_g && !ioctl_ext_has_c && !ioctl_ext_has_m;
-wire       sc_file = ioctl_ext_is_sc;
-wire       sg_file = ioctl_ext_is_sg;
-wire       sgsc_file = sc_file | sg_file;
+wire       gg          = 1'b1;
+wire       systeme     = 1'b0;
+wire       palettemode = 1'b0;
+reg [21:0] cart_mask = 0;
+reg [21:0] cart_mask512 = 0;
+reg        cart_sz512 = 0;
 
 always @(posedge clk_sys) begin
 	reg old_download;
 	old_download <= cart_download;
 	status_set <= 1'b0;
 
-	if (eject_rom) begin
+	if (~old_download & cart_download) begin
 		cart_mask <= 0;
 		cart_mask512 <= 0;
 		cart_sz512 <= 0;
-		gg <= 0;
-		palettemode <= 0;
-		load_sc <= 0;
-		load_sg <= 0;
-		load_sc_multicart <= 0;
-		load_sc_megacart <= 0;
-		sc3000_auto <= 0;
-		sc_multicart_auto <= 0;
-		sc_megacart_auto <= 0;
-		if (sc3000_menu_auto) begin
-			status_in <= {64'd0, status};
-			status_in[58] <= 1'b0;
-			status_set <= 1'b1;
-			sc3000_menu_auto <= 1'b0;
-		end
-	end else if (~old_download & cart_download) begin
-		load_sc <= 0;
-		load_sg <= 0;
-		load_sc_multicart <= 0;
-		load_sc_megacart <= 0;
-		palettemode <= 0;
-		sc3000_auto <= 0;
-		sc_multicart_auto <= 0;
-		sc_megacart_auto <= 0;
 	end else if (ioctl_wr & cart_download) begin
 		cart_mask <= cart_mask | ioctl_addr[21:0];
 		cart_mask512 <= cart_mask512 | (ioctl_addr[21:0] - 10'd512);
@@ -799,54 +598,33 @@ always @(posedge clk_sys) begin
 			cart_mask <= 0;
 		if (ioctl_addr == 512)
 			cart_mask512 <= 0;
-		if ((ioctl_index[4:0] == 1) || (ioctl_index[4:0] == 2))
-			systeme <= 1'b0;
-		load_sc <= sc_file;
-		load_sg <= sg_file;
-		// Large .sg/.sc images use the Survivors paging latch family:
-		// >32KB = multicart-style banking, >2MB = 128-slot megacart banking.
-		load_sc_multicart <= load_sc_multicart | (sgsc_file & (ioctl_addr > 25'h07FFF));
-		load_sc_megacart <= load_sc_megacart | (sgsc_file & (ioctl_addr > 25'h1FFFFF));
-		gg <= ioctl_index[4:0] == 2;
 	end;
 	if (old_download & ~cart_download) begin
-		sc3000_auto <= load_sc;
-		sc_multicart_auto <= (load_sc | load_sg) & load_sc_multicart;
-		sc_megacart_auto <= (load_sc | load_sg) & load_sc_megacart;
-		palettemode <= load_sg;
-		if (load_sc) begin
-			if (!status[58]) begin
-				status_in <= {64'd0, status};
-				status_in[58] <= 1'b1;
-				status_set <= 1'b1;
-				sc3000_menu_auto <= 1'b1;
-			end
-		end else if (sc3000_menu_auto) begin
-			status_in <= {64'd0, status};
-			status_in[58] <= 1'b0;
-			status_set <= 1'b1;
-			sc3000_menu_auto <= 1'b0;
-		end
 		// Headered dumps end at size = N*1024 + 512, so the final byte address
 		// has low 10 bits of 10'h1FF.
 		cart_sz512 <= (ioctl_addr[9:0] == 10'h1FF);
 	end;
-	if (ioctl_wr & (ioctl_index==4)) begin
-		systeme <= 1'b1;
-	end;
 end
 
-wire [13:0] ram_a;
-wire        ram_we;
-wire  [7:0] ram_d;
-wire  [7:0] ram_q;
+wire [13:0] ram_a1;
+wire        ram_we1;
+wire  [7:0] ram_d1;
+wire  [7:0] ram_q1;
+wire [13:0] ram_a2;
+wire        ram_we2;
+wire  [7:0] ram_d2;
+wire  [7:0] ram_q2;
 
-wire [14:0] nvram_a;
-wire        nvram_we;
-wire  [7:0] nvram_d;
-wire  [7:0] nvram_q;
+wire [14:0] nvram_a1;
+wire        nvram_we1;
+wire  [7:0] nvram_d1;
+wire  [7:0] nvram_q1;
+wire [14:0] nvram_a2;
+wire        nvram_we2;
+wire  [7:0] nvram_d2;
+wire  [7:0] nvram_q2;
 
-system #(63) system
+system #(.MAX_SPPL(63), .GAMEGEAR_ONLY(1), .CHEATS_ENABLE(0)) system1
 (
 	.clk_sys(clk_sys),
 	.ce_cpu(ce_cpu),
@@ -854,27 +632,27 @@ system #(63) system
 	.ce_pix(ce_pix),
 	.ce_sp(ce_sp),
 	.turbo(turbo),
-	.gg(gg),
-	.ggres(ggres),
-	.systeme(systeme),
-	.bios_en(bios_en),
-	.ext_bios_sel(ext_bios_sel),
-	.ext_bios_loaded(ext_bios_loaded),
+	.gg(1'b1),
+	.ggres(1'b1),
+	.systeme(1'b0),
+	.bios_en(1'b0),
+	.ext_bios_sel(1'b0),
+	.ext_bios_loaded(1'b0),
 	.dbr(dbr),
 
 	.RESET_n(~reset_active),
 
-	.GG_RESET(ioctl_download && ioctl_wr && !ioctl_addr),
-	.GG_EN(status[24]),
-	.GG_CODE(gg_code),
-	.GG_AVAIL(gg_avail),
+	.GG_RESET(1'b0),
+	.GG_EN(1'b1),
+	.GG_CODE(129'd0),
+	.GG_AVAIL(),
 	.gg_link_en(gg_link),
-	.gg_link_in(gg_link_in),
-	.gg_link_out(gg_link_out),
+	.gg_link_in(gg_link_in1),
+	.gg_link_out(gg_link_out1),
 
-	.rom_rd(ram_rd),
-	.rom_a(ram_addr),
-	.rom_do(ram_dout),
+	.rom_rd(ram_rd1),
+	.rom_a(ram_addr1),
+	.rom_do(ram_dout1),
 
 	.j1_up(joya[3]),
 	.j1_down(joya[2]),
@@ -883,9 +661,9 @@ system #(63) system
 	.j1_tl(joya[4]),
 	.j1_tr(joya[5]),
 	.j1_th(joya_th),
-	.j1_start(swap ? joy_1[11] : joy_0[11]),
-	.j1_coin(swap ? joy_1[10] : joy_0[10]),
-	.j1_a3(swap ? joy_1[8] : joy_0[8]),
+	.j1_start(1'b0),
+	.j1_coin(1'b0),
+	.j1_a3(1'b0),
 
 	.j2_up(joyb[3]),
 	.j2_down(joyb[2]),
@@ -896,94 +674,206 @@ system #(63) system
 	.j2_th(joyb_th),
 	.pause(joya[6]&joyb[6]),
 	.soft_reset(soft_reset_btn),
-	.j2_start(swap ? joy_0[11] : joy_1[11]),
-	.j2_coin(swap ? joy_0[10] : joy_1[10]),
-	.j2_a3(swap ? joy_0[8] : joy_1[8]),
+	.j2_start(1'b0),
+	.j2_coin(1'b0),
+	.j2_a3(1'b0),
 
 	.j1_tr_out(joya_tr_out),
 	.j1_th_out(joya_th_out),
 	.j2_tr_out(joyb_tr_out),
 	.j2_th_out(joyb_th_out),
 
-	.E0Type(SYSMODE[0][5:4]),
-	.E1Use(SYSMODE[0][6]),
-	.E2Use(SYSMODE[0][7]),
-	.F2(DSW[0]),
-	.F3(DSW[1]),
-	.E0(DSW[2]),
+	.E0Type(2'b00),
+	.E1Use(1'b0),
+	.E2Use(1'b0),
+	.F2(8'd0),
+	.F3(8'd0),
+	.E0(8'd0),
 
-	.has_pedal(SYSMODE[0][3]),
-	.has_paddle(SYSMODE[0][2]),
-	.paddle(paddle),
-	.paddle2(paddle2),
-	.pedal(pedal),
-	.sc3000_en(sc3000_en),
-	.sc_multicart_en(sc_multicart_en),
-	.sc_megacart_en(sc_megacart_en),
-	.sc_cart_ram(sc_cart_ram),
-	.sk1100_en(sk1100_en),
+	.has_pedal(1'b0),
+	.has_paddle(1'b0),
+	.paddle(8'd0),
+	.paddle2(8'd0),
+	.pedal(8'd0),
+	.sc3000_en(1'b0),
+	.sc_multicart_en(1'b0),
+	.sc_megacart_en(1'b0),
+	.sc_cart_ram(2'b00),
+	.sk1100_en(1'b0),
 	.sk1100_row_sel(sk1100_row_sel),
 	.sk1100_row_data(sk1100_row_data),
 
-	.x(x),
-	.y(y),
-	.color(color),
-	.palettemode(sg_palette),
-	.mask_column(mask_column),
-	.black_column(status[28] && ~status[13]),
-	.smode_M1(smode_M1),
-	.smode_M2(smode_M2),
-	.smode_M3(smode_M3),
+	.x(x1),
+	.y(y1),
+	.color(color1),
+	.palettemode(1'b0),
+	.mask_column(mask_column1),
+	.black_column(1'b0),
+	.smode_M1(smode1_M1),
+	.smode_M2(smode1_M2),
+	.smode_M3(smode1_M3),
 	.ysj_quirk(ysj_quirk),
 	.pal(pal),
 	.region(status[10]),
-	.mapper_lock((status[46:45] == 2'b01) && ~systeme),
-	.mapper_zemina_force(status[46:45] == 2'b10),
-	.vdp_enables(dbg_menu ? status[34:33] : 2'b00),
-	.psg_enables(dbg_menu ? status[36:35] : 2'b00),
+	.mapper_lock(1'b0),
+	.mapper_zemina_force(1'b0),
+	.vdp_enables(2'b00),
+	.psg_enables(2'b00),
 
-	.fm_ena(~status[12] | gg),
-	.audioL(audio_l),
-	.audioR(audio_r),
+	.fm_ena(1'b0),
+	.audioL(audio1_l),
+	.audioR(audio1_r),
 
 	.sp64(status[8]),
 
-	.ram_a(ram_a),
-	.ram_we(ram_we),
-	.ram_d(ram_d),
-	.ram_q(ram_q),
+	.ram_a(ram_a1),
+	.ram_we(ram_we1),
+	.ram_d(ram_d1),
+	.ram_q(ram_q1),
 
-	.nvram_a(nvram_a),
-	.nvram_we(nvram_we),
-	.nvram_d(nvram_d),
-	.nvram_q(nvram_q),
+	.nvram_a(nvram_a1),
+	.nvram_we(nvram_we1),
+	.nvram_d(nvram_d1),
+	.nvram_q(nvram_q1),
 
-	.encrypt(SYSMODE[0][1:0]),
-	.key_a(key_a),
-	.key_d(key_d),
+	.encrypt(2'b00),
+	.key_a(),
+	.key_d(8'd0),
 
 	.ROMCL(clk_sys),
 	.ROMAD(ioctl_addr),
 	.ROMDT(ioctl_dout),
-	.ROMEN(ioctl_wr & (ioctl_index[4:0]==1)),
-	.BIOSWEN(ioctl_wr & (ioctl_index[4:0]==3))
+	.ROMEN(1'b0),
+	.BIOSWEN(1'b0)
 );
 
-wire [12:0] key_a;
-wire [7:0] key_d;
+wire [7:0] joy2_gg = ~joy_1[7:0];
+wire       joy2_j1_tr_out;
+wire       joy2_j1_th_out;
+wire       joy2_j2_tr_out;
+wire       joy2_j2_th_out;
 
-wire [12:0] encrypt_a;
-
-wire encrypt_range = ioctl_addr[24:13]==12'b0_0000_0100_100;
-assign encrypt_a = (ioctl_download && encrypt_range) ? ioctl_addr[12:0] : key_a;
-
-spram #(.widthad_a(13)) encrypt_key
+system #(.MAX_SPPL(63), .GAMEGEAR_ONLY(1), .CHEATS_ENABLE(0)) system2
 (
-	.clock(clk_sys),
-	.wren(ioctl_wr && encrypt_range),
-	.data(ioctl_dout),
-	.address(encrypt_a),
-	.q(key_d)
+	.clk_sys(clk_sys),
+	.ce_cpu(ce_cpu),
+	.ce_vdp(ce_vdp),
+	.ce_pix(ce_pix),
+	.ce_sp(ce_sp),
+	.turbo(turbo),
+	.gg(1'b1),
+	.ggres(1'b1),
+	.systeme(1'b0),
+	.bios_en(1'b0),
+	.ext_bios_sel(1'b0),
+	.ext_bios_loaded(1'b0),
+	.dbr(dbr),
+
+	.RESET_n(~reset2_active),
+
+	.GG_RESET(1'b0),
+	.GG_EN(1'b1),
+	.GG_CODE(129'd0),
+	.GG_AVAIL(),
+	.gg_link_en(gg_link),
+	.gg_link_in(gg_link_in2),
+	.gg_link_out(gg_link_out2),
+
+	.rom_rd(ram_rd2),
+	.rom_a(ram_addr2),
+	.rom_do(ram_dout2),
+
+	.j1_up(joy2_gg[3]),
+	.j1_down(joy2_gg[2]),
+	.j1_left(joy2_gg[1]),
+	.j1_right(joy2_gg[0]),
+	.j1_tl(joy2_gg[4]),
+	.j1_tr(joy2_gg[5]),
+	.j1_th(1'b1),
+	.j1_start(1'b0),
+	.j1_coin(1'b0),
+	.j1_a3(1'b0),
+
+	.j2_up(1'b1),
+	.j2_down(1'b1),
+	.j2_left(1'b1),
+	.j2_right(1'b1),
+	.j2_tl(1'b1),
+	.j2_tr(1'b1),
+	.j2_th(1'b1),
+	.pause(joy2_gg[6]),
+	.soft_reset(soft_reset_btn),
+	.j2_start(1'b0),
+	.j2_coin(1'b0),
+	.j2_a3(1'b0),
+
+	.j1_tr_out(joy2_j1_tr_out),
+	.j1_th_out(joy2_j1_th_out),
+	.j2_tr_out(joy2_j2_tr_out),
+	.j2_th_out(joy2_j2_th_out),
+
+	.E0Type(2'b00),
+	.E1Use(1'b0),
+	.E2Use(1'b0),
+	.F2(8'd0),
+	.F3(8'd0),
+	.E0(8'd0),
+
+	.has_pedal(1'b0),
+	.has_paddle(1'b0),
+	.paddle(8'd0),
+	.paddle2(8'd0),
+	.pedal(8'd0),
+	.sc3000_en(1'b0),
+	.sc_multicart_en(1'b0),
+	.sc_megacart_en(1'b0),
+	.sc_cart_ram(2'b00),
+	.sk1100_en(1'b0),
+	.sk1100_row_sel(),
+	.sk1100_row_data(12'hFFF),
+
+	.x(x2),
+	.y(y2),
+	.color(color2),
+	.palettemode(1'b0),
+	.mask_column(mask_column2),
+	.black_column(1'b0),
+	.smode_M1(smode2_M1),
+	.smode_M2(smode2_M2),
+	.smode_M3(smode2_M3),
+	.ysj_quirk(ysj_quirk),
+	.pal(pal),
+	.region(status[10]),
+	.mapper_lock(1'b0),
+	.mapper_zemina_force(1'b0),
+	.vdp_enables(2'b00),
+	.psg_enables(2'b00),
+
+	.fm_ena(1'b0),
+	.audioL(audio2_l),
+	.audioR(audio2_r),
+
+	.sp64(status[8]),
+
+	.ram_a(ram_a2),
+	.ram_we(ram_we2),
+	.ram_d(ram_d2),
+	.ram_q(ram_q2),
+
+	.nvram_a(nvram_a2),
+	.nvram_we(nvram_we2),
+	.nvram_d(nvram_d2),
+	.nvram_q(nvram_q2),
+
+	.encrypt(2'b00),
+	.key_a(),
+	.key_d(8'd0),
+
+	.ROMCL(clk_sys),
+	.ROMAD(ioctl_addr),
+	.ROMDT(ioctl_dout),
+	.ROMEN(1'b0),
+	.BIOSWEN(1'b0)
 );
 
 assign joy[0] = status[1] ? joy_1[7:0] : joy_0[7:0];
@@ -991,27 +881,27 @@ assign joy[1] = status[1] ? joy_0[7:0] : joy_1[7:0];
 assign joy[2] = joy_2[7:0];
 assign joy[3] = joy_3[7:0];
 
-wire [1:0] userio_mode = status[56:55];
-wire       userio_snac = userio_mode == 2'd1;
-wire       gg_link = (userio_mode == 2'd2) & gg;
-wire [6:0] gg_link_in;
-wire [6:0] gg_link_out;
-wire [6:0] gg_user_out;
-wire       raw_serial = userio_snac & ~gg_link;
-wire pause_combo = status[17];
+wire [1:0] userio_mode = 2'd0;
+wire       userio_snac = 1'b0;
+wire       gg_link = 1'b1;
+wire [6:0] gg_link_in1;
+wire [6:0] gg_link_out1;
+wire [6:0] gg_link_in2;
+wire [6:0] gg_link_out2;
+wire       raw_serial = 1'b0;
 wire swap = status[1];
-wire sk1100_en = status[57];
-wire sc3000_en = status[58] | sc3000_auto;
-wire [1:0] sc_cart_ram = status[60:59];
-wire sg_palette = palettemode | sc3000_en;
-wire sc_multicart_en = sg_palette & sc_multicart_auto;
-wire sc_megacart_en = sc_multicart_en & sc_megacart_auto;
+wire sk1100_en = 1'b0;
+wire sc3000_en = 1'b0;
+wire [1:0] sc_cart_ram = 2'b00;
+wire sg_palette = 1'b0;
+wire sc_multicart_en = 1'b0;
+wire sc_megacart_en = 1'b0;
 
 wire [7:0] joya;
 wire [7:0] joyb;
 wire [7:0] joyser;
 wire [2:0] sk1100_row_sel;
-wire [11:0] sk1100_row_data;
+wire [11:0] sk1100_row_data = 12'hFFF;
 
 wire      joya_tr_out;
 wire      joya_th_out;
@@ -1022,7 +912,7 @@ wire      joyb_th;
 wire      joyser_th;
 reg [1:0] jcnt = 0;
 
-wire has_pedal = SYSMODE[0][3];
+wire has_pedal = 1'b0;
 wire [7:0] pedal = paddle_en ? paddle_1 : !joy0_y[7] ? 8'h00: {~joy0_y[6:0],~joy0_y[6]};
 wire [7:0] paddlein = paddle_en ? paddle_0 : has_pedal ? {~joy0_x[7],joy0_x[6:0]} : {joy0_x[7],joy0_x[7],joy0_x[7],joy0_x[7],joy0_x[7],joy0_x[7:5]};
 wire [7:0] paddle2 = paddle_en ? paddle_1 : joy1_x;
@@ -1033,21 +923,10 @@ wire [11:0] sk1100_joy_row = {
 	joya[5], joya[4], joya[0], joya[1], joya[2], joya[3]
 };
 
-// USERIO adapter permutation. Internally, gg_link_* is PC0..PC6.
-// Physically, put Game Gear TX/PC4 on USER_IO[1] and RX/PC5 on USER_IO[2].
-assign gg_link_in  = {USER_IN[6], USER_IN[2], USER_IN[1], USER_IN[5], USER_IN[4], USER_IN[3], USER_IN[0]};
-assign gg_user_out = {gg_link_out[6], gg_link_out[3], gg_link_out[2], gg_link_out[1], gg_link_out[5], gg_link_out[4], gg_link_out[0]};
-
-keyboard keyboard_mapper
-(
-	.clk_sys(clk_sys),
-	.reset(raw_reset),
-	.enable(sk1100_en | sc3000_en),
-	.joy_row(sk1100_joy_row),
-	.row_sel(sk1100_row_sel),
-	.ps2_key(ps2_key),
-	.row_data(sk1100_row_data)
-);
+// Gear-to-Gear cable crossover. Internally these vectors are PC0..PC6.
+// Cable mapping: PC0<->PC2, PC1<->PC3, PC4(TX)<->PC5(RX), PC6 straight.
+assign gg_link_in1 = {gg_link_out2[6], gg_link_out2[4], gg_link_out2[5], gg_link_out2[1], gg_link_out2[0], gg_link_out2[3], gg_link_out2[2]};
+assign gg_link_in2 = {gg_link_out1[6], gg_link_out1[4], gg_link_out1[5], gg_link_out1[1], gg_link_out1[0], gg_link_out1[3], gg_link_out1[2]};
 
 always @(posedge clk_sys) begin
 	reg old_th;
@@ -1063,9 +942,6 @@ always @(posedge clk_sys) begin
 		joyser_th <= USER_IN[4];//sensor
 
 		if (tmr) tmr <= tmr - 1'd1;
-		if (!USER_IN[0] & !USER_IN[2] & !USER_IN[6] & pause_combo) begin //D 1 2 combo
-			tmr <= 57000;
-		end
 		joyser[6] <= !tmr;
 		joyser[7] <= 1'b0;
 
@@ -1096,7 +972,7 @@ always @(posedge clk_sys) begin
 
 		if(reset_active | ~status[14]) jcnt <= 0;
 
-		USER_OUT <= gg_link ? gg_user_out : 7'b1111111;
+		USER_OUT <= 7'b1111111;
 	end
 
 	if(gun_en) begin
@@ -1120,16 +996,33 @@ end
 spram #(.widthad_a(14)) ram_inst
 (
 	.clock     (clk_sys),
-	.address   (ram_clr_run ? ram_clr_addr : (systeme ? ram_a : {1'b0,ram_a[12:0]})),
-	.wren      (ram_clr_run | ram_we),
-	.data      (ram_clr_run ? 8'h00 : ram_d),
-	.q         (ram_q)
+	.address   (ram_clr_run ? ram_clr_addr : {1'b0,ram_a1[12:0]}),
+	.wren      (ram_clr_run | ram_we1),
+	.data      (ram_clr_run ? 8'h00 : ram_d1),
+	.q         (ram_q1)
 );
 
-wire [15:0] audio_l, audio_r;
+spram #(.widthad_a(14)) ram2_inst
+(
+	.clock     (clk_sys),
+	.address   (ram_clr_run ? ram_clr_addr : {1'b0,ram_a2[12:0]}),
+	.wren      (ram_clr_run | ram_we2),
+	.data      (ram_clr_run ? 8'h00 : ram_d2),
+	.q         (ram_q2)
+);
 
-assign AUDIO_L=audio_l;
-assign AUDIO_R=audio_r;
+wire [15:0] audio1_l, audio1_r;
+wire [15:0] audio2_l, audio2_r;
+wire [1:0]  audio_sel = status[63:62];
+
+assign AUDIO_L = (audio_sel == 2'd0) ? audio1_l :
+                 (audio_sel == 2'd1) ? audio2_l :
+                 (audio_sel == 2'd2) ? ($signed(audio1_l[15:1]) + $signed(audio2_l[15:1])) :
+                                       ($signed(audio1_l[15:1]) + $signed(audio1_r[15:1]));
+assign AUDIO_R = (audio_sel == 2'd0) ? audio1_r :
+                 (audio_sel == 2'd1) ? audio2_r :
+                 (audio_sel == 2'd2) ? ($signed(audio1_r[15:1]) + $signed(audio2_r[15:1])) :
+                                       ($signed(audio2_l[15:1]) + $signed(audio2_r[15:1]));
 
 //compressor compressor
 //(
@@ -1138,33 +1031,63 @@ assign AUDIO_R=audio_r;
 //	AUDIO_L,       AUDIO_R
 //);
 
-wire [8:0] x;
-wire [8:0] y;
-wire [11:0] color;
-wire mask_column;
-wire smode_M1, smode_M2, smode_M3;
-wire pal = status[2];
-wire border = status[13] & ~gg;
-wire ggres = ~status[39] & gg;
+wire [8:0] x1, y1;
+wire [8:0] x2, y2;
+wire [11:0] color1;
+wire [11:0] color2;
+wire mask_column1;
+wire mask_column2;
+wire smode1_M1, smode1_M2, smode1_M3;
+wire smode2_M1, smode2_M2, smode2_M3;
+wire pal = 1'b0;
+wire border = 1'b0;
+wire ggres = 1'b1;
 wire turbo = status[40];
+wire HS1, VS1;
+wire HS2, VS2;
+wire HBlank1, VBlank1;
+wire HBlank2, VBlank2;
 
-video video
+video video1
 (
 	.clk(clk_sys),
 	.ce_pix(ce_pix),
 	.pal(pal),
 	.ggres(ggres),
 	.border(border),
-	.mask_column(mask_column),
+	.mask_column(mask_column1),
 	.cut_mask(status[29]),
-	.smode_M1(smode_M1),
-	.smode_M3(smode_M3),
-	.x(x),
-	.y(y),
-	.hsync(HS),
-	.vsync(VS),
-	.hblank(HBlank),
-	.vblank(VBlank)
+	.smode_M1(smode1_M1),
+	.smode_M2(smode1_M2),
+	.smode_M3(smode1_M3),
+	.smode_M4(1'b1),
+	.x(x1),
+	.y(y1),
+	.hsync(HS1),
+	.vsync(VS1),
+	.hblank(HBlank1),
+	.vblank(VBlank1)
+);
+
+video video2
+(
+	.clk(clk_sys),
+	.ce_pix(ce_pix),
+	.pal(pal),
+	.ggres(ggres),
+	.border(border),
+	.mask_column(mask_column2),
+	.cut_mask(status[29]),
+	.smode_M1(smode2_M1),
+	.smode_M2(smode2_M2),
+	.smode_M3(smode2_M3),
+	.smode_M4(1'b1),
+	.x(x2),
+	.y(y2),
+	.hsync(HS2),
+	.vsync(VS2),
+	.hblank(HBlank2),
+	.vblank(VBlank2)
 );
 
 reg ce_cpu;
@@ -1201,9 +1124,14 @@ always @(negedge clk_sys) begin
 	end
 end
 
-wire HS, VS;
-reg  HSync, VSync;
-wire HBlank, VBlank;
+wire gg2p_ce_pix;
+wire gg2p_HSync;
+wire gg2p_VSync;
+wire gg2p_HBlank;
+wire gg2p_VBlank;
+wire [3:0] gg2p_r;
+wire [3:0] gg2p_g;
+wire [3:0] gg2p_b;
 
 wire [2:0] scale = status[5:3];
 wire [2:0] sl = scale ? scale - 1'd1 : 3'd0;
@@ -1211,27 +1139,66 @@ wire [2:0] sl = scale ? scale - 1'd1 : 3'd0;
 assign CLK_VIDEO = clk_sys;
 assign VGA_SL = sl[1:0];
 
-always @(posedge CLK_VIDEO) begin
-	HSync <= HS;
-	if(~HSync & HS) VSync <= VS;
-end
-
-video_mixer #(.HALF_DEPTH(1), .LINE_LENGTH(300), .GAMMA(1)) video_mixer
+gg2p_video gg2p_video
 (
-	.*,
+	.clk(clk_sys),
+	.ce_pix(ce_pix),
+
+	.x1(x1),
+	.y1(y1),
+	.hblank1(HBlank1),
+	.vblank1(VBlank1),
+	.smode1_m1(smode1_M1),
+	.color1(color1),
+
+	.x2(x2),
+	.y2(y2),
+	.hblank2(HBlank2),
+	.vblank2(VBlank2),
+	.smode2_m1(smode2_M1),
+	.color2(color2),
+
+	.separator(status[61]),
+
+	.ce_pix_out(gg2p_ce_pix),
+	.hsync(gg2p_HSync),
+	.vsync(gg2p_VSync),
+	.hblank(gg2p_HBlank),
+	.vblank(gg2p_VBlank),
+	.r(gg2p_r),
+	.g(gg2p_g),
+	.b(gg2p_b)
+);
+
+video_mixer #(.HALF_DEPTH(1), .LINE_LENGTH(320), .GAMMA(1)) video_mixer
+(
+	.CLK_VIDEO(CLK_VIDEO),
+	.CE_PIXEL(CE_PIXEL),
+	.ce_pix(gg2p_ce_pix),
+	.gamma_bus(gamma_bus),
+	.HSync(gg2p_HSync),
+	.VSync(gg2p_VSync),
+	.HBlank(gg2p_HBlank),
+	.VBlank(gg2p_VBlank),
+	.HDMI_FREEZE(HDMI_FREEZE),
+	.VGA_R(VGA_R),
+	.VGA_G(VGA_G),
+	.VGA_B(VGA_B),
+	.VGA_HS(VGA_HS),
+	.VGA_VS(VGA_VS),
+	.VGA_DE(vga_de),
 	.scandoubler(scale || forced_scandoubler),
 	.hq2x(scale==1),
 	.freeze_sync(),
 
-	.VGA_DE(vga_de),
-	.R((gun_en & gun_target && (~&gun_crosshair)) ? 8'd255 : {2{color[3:0]}}),
-	.G((gun_en & gun_target && (~&gun_crosshair)) ? 8'd0   : {2{color[7:4]}}),
-	.B((gun_en & gun_target && (~&gun_crosshair)) ? 8'd0   : {2{color[11:8]}})
+	.R(gg2p_r),
+	.G(gg2p_g),
+	.B(gg2p_b)
 );
 
 
 /////////////////////////  STATE SAVE/LOAD  /////////////////////////////
-wire bk_save_write = nvram_we;
+wire bk_save_write = nvram_we1 | nvram_we2;
 reg bk_pending;
 
 always @(posedge clk_sys) begin
@@ -1241,18 +1208,37 @@ always @(posedge clk_sys) begin
 		bk_pending <= 1'b0;
 end
 
+wire [14:0] nvram_sd_addr = {sd_lba[5:0], sd_buff_addr};
+wire  [7:0] nvram_sd_q1;
+wire  [7:0] nvram_sd_q2;
+assign sd_buff_din = nvram_sd_q1;
+
 dpram #(.widthad_a(15)) nvram_inst
 (
 	.clock_a     (clk_sys),
-	.address_a   (nvram_a),
-	.wren_a      (nvram_we),
-	.data_a      (nvram_d),
-	.q_a         (nvram_q),
+	.address_a   (nvram_a1),
+	.wren_a      (nvram_we1),
+	.data_a      (nvram_d1),
+	.q_a         (nvram_q1),
 	.clock_b     (clk_sys),
-	.address_b   ({sd_lba[5:0],sd_buff_addr}),
+	.address_b   (nvram_sd_addr),
 	.wren_b      (sd_buff_wr & sd_ack),
 	.data_b      (sd_buff_dout),
-	.q_b         (sd_buff_din)
+	.q_b         (nvram_sd_q1)
+);
+
+dpram #(.widthad_a(15)) nvram2_inst
+(
+	.clock_a     (clk_sys),
+	.address_a   (nvram_a2),
+	.wren_a      (nvram_we2),
+	.data_a      (nvram_d2),
+	.q_a         (nvram_q2),
+	.clock_b     (clk_sys),
+	.address_b   (nvram_sd_addr),
+	.wren_b      (sd_buff_wr & sd_ack),
+	.data_b      (sd_buff_dout),
+	.q_b         (nvram_sd_q2)
 );
 
 wire downloading = cart_download;
@@ -1325,14 +1311,14 @@ always @(posedge clk_sys) begin
 	end
 end
 
-wire [1:0] gun_mode = status[19:18];
-wire       gun_btn_mode = status[20];
-wire       gun_port = status[21];
-wire       gun_en = gun_mode && !gg;
+wire [1:0] gun_mode = 2'b00;
+wire       gun_btn_mode = 1'b0;
+wire       gun_port = 1'b0;
+wire       gun_en = 1'b0;
 wire       gun_target;
 wire       gun_sensor;
 wire       gun_trigger;
-wire [1:0] gun_crosshair = status[23:22];
+wire [1:0] gun_crosshair = 2'b00;
 
 lightgun lightgun
 (
@@ -1346,8 +1332,8 @@ lightgun lightgun
 	.JOY_Y(gun_mode[0] ? joy0_y : joy1_y),
 	.JOY(gun_mode[0] ? joy_0[7:0] : joy_1[7:0]),
 
-	.HDE(~HBlank),
-	.VDE(~VBlank),
+	.HDE(~HBlank1),
+	.VDE(~VBlank1),
 	.CE_PIX(ce_pix),
 
 	.BTN_MODE(gun_btn_mode),
@@ -1361,8 +1347,8 @@ lightgun lightgun
 
 // Paddle support
 wire       jp_region    = status[10];
-wire       paddle_en    = status[37] | status[38];
-wire       paddle_joy   = status[38];
+wire       paddle_en    = 1'b0;
+wire       paddle_joy   = 1'b0;
 
 reg  [3:0] paddle_0_nib,   paddle_1_nib;
 reg  [3:0] paddle_0_nib_q, paddle_1_nib_q;
